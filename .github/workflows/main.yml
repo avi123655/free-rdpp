@@ -1,4 +1,4 @@
-name: Free RDP via Cloudflare (no domain, no card)
+name: Free RDP via Cloudflare (fixed version)
 
 on: workflow_dispatch
 
@@ -6,18 +6,22 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Enable RDP
+      - name: Enable RDP and Start Service
         run: |
           Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "Pass@123" -Force)
-          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          net start termservice
+          netstat -ano | findstr 3389
 
-      - name: Download Cloudflared
+      - name: Install Cloudflared
         run: |
           Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile cloudflared.exe
 
-      - name: Create Tunnel
+      - name: Start Cloudflare Tunnel (no domain)
         run: |
-          Start-Process cloudflared.exe -ArgumentList "tunnel --url rdp://localhost:3389" -NoNewWindow
           Write-Host "Starting tunnel..."
-          Start-Sleep -Seconds 21600  # 6 hours
+          Start-Process cloudflared.exe -ArgumentList "tunnel --url rdp://localhost:3389" -NoNewWindow
+          Start-Sleep -Seconds 10
+          Get-Content .\cloudflared.log -Tail 30
+          Start-Sleep -Seconds 21600  # keep alive 6h
